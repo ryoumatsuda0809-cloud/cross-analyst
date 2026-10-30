@@ -1,0 +1,5 @@
+# LLM provider SDK (used only in pipeline/llm.py)
+google-genai>=1.0
+pypdf>=4.0
+pytest>=8.0
+# only needed to regenerate the sample PDFs: reportlab

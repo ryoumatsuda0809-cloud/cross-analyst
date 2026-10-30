@@ -1,0 +1,19 @@
+# company: Harbor Lane Supply Co. (FICTIONAL)
+# This company does not exist. All figures are invented for testing. Units: thousands of USD.
+item,FY2023,FY2024,FY2025
+revenue,4200,4830,5410
+cost_of_sales,3150,3660,4160
+gross_profit,1050,1170,1250
+operating_income,290,310,300
+interest_expense,40,55,80
+net_income,180,190,175
+operating_cash_flow,240,90,-60
+cash,380,210,95
+receivables,520,790,1080
+inventory,610,860,1120
+current_assets,1560,1900,2340
+payables,430,470,520
+current_liabilities,980,1350,1880
+total_assets,2600,3050,3560
+total_liabilities,1500,1890,2340
+equity,1100,1160,1220
