@@ -1,0 +1,37 @@
+[
+  {
+    "id": "M7",
+    "name": "Firm interest coverage below 2 (debt-at-risk criterion)",
+    "paper": {
+      "file": "fed_icr_stress_test_2024.pdf",
+      "title": "Stress Testing the Corporate Debt Servicing Capacity: A Scenario Analysis"
+    },
+    "level": "firm",
+    "ratio": "ebit_interest_coverage",
+    "inputs": ["ebit", "interest_expense"],
+    "formula": "ebit / interest_expense",
+    "threshold": {"operator": "<", "value": 2},
+    "bad_direction": "lower_is_worse",
+    "direction_basis": "paper",
+    "diagnoses": "whether the company would count as a firm whose debt is at risk",
+    "notes": "The paper reports the share of sector debt held by firms below this value; for one company only its own ratio is compared with the threshold.",
+    "quote": "the percent of debt held by firms with ICRs below 2"
+  },
+  {
+    "id": "M8",
+    "name": "Aggregate interest coverage and scenario projection",
+    "paper": {
+      "file": "fed_icr_stress_test_2024.pdf",
+      "title": "Stress Testing the Corporate Debt Servicing Capacity: A Scenario Analysis"
+    },
+    "level": "aggregate",
+    "ratio": "aggregate_ebit_interest_coverage",
+    "inputs": ["aggregate_ebit", "aggregate_interest_expense"],
+    "formula": "aggregate_ebit / aggregate_interest_expense",
+    "threshold": null,
+    "bad_direction": "lower_is_worse",
+    "direction_basis": "inferred",
+    "diagnoses": "the debt-servicing capacity of a whole group of firms under macroeconomic scenarios",
+    "quote": "We compute the projected aggregate ICR for the chosen group of firms as the ratio of the projected combined earnings to the projected combined interest expense of all firms in the group."
+  }
+]

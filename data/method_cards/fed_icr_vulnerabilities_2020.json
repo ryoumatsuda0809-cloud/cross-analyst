@@ -1,0 +1,106 @@
+[
+  {
+    "id": "M1",
+    "name": "Firm-level interest coverage ratio (simple threshold)",
+    "paper": {
+      "file": "fed_icr_vulnerabilities_2020.pdf",
+      "title": "Interest Coverage Ratios: Assessing Vulnerabilities in Nonfinancial Corporate Credit"
+    },
+    "level": "firm",
+    "ratio": "ebit_interest_coverage",
+    "inputs": ["ebit", "interest_expense"],
+    "formula": "ebit / interest_expense",
+    "threshold": {"operator": "<", "value": 1},
+    "bad_direction": "lower_is_worse",
+    "direction_basis": "paper",
+    "diagnoses": "whether earnings are enough to cover interest expenses",
+    "notes": "The paper smooths seasonality with four-quarter sums; the annual figures in the data are used instead.",
+    "quote": "First, a simple threshold of 1, below which a firm cannot completely cover its interest expenses using earnings."
+  },
+  {
+    "id": "M2",
+    "name": "Free cash flow relative to total assets",
+    "paper": {
+      "file": "fed_icr_vulnerabilities_2020.pdf",
+      "title": "Interest Coverage Ratios: Assessing Vulnerabilities in Nonfinancial Corporate Credit"
+    },
+    "level": "firm",
+    "ratio": "free_cash_flow_to_assets",
+    "inputs": ["operating_income", "depreciation", "interest_expense", "taxes", "capital_expenditures", "total_assets"],
+    "formula": "(operating_income + depreciation - interest_expense - taxes - capital_expenditures) / total_assets",
+    "threshold": null,
+    "bad_direction": "lower_is_worse",
+    "direction_basis": "inferred",
+    "diagnoses": "how much cash the business generates after interest, taxes and investment, relative to its size",
+    "notes": "Operating income before depreciation is taken as operating_income plus depreciation.",
+    "quote": "Free cash flow is computed as operating income before depreciation minus interest expenses minus taxes minus capital expenditures."
+  },
+  {
+    "id": "M3",
+    "name": "Leverage (total debt over assets)",
+    "paper": {
+      "file": "fed_icr_vulnerabilities_2020.pdf",
+      "title": "Interest Coverage Ratios: Assessing Vulnerabilities in Nonfinancial Corporate Credit"
+    },
+    "level": "firm",
+    "ratio": "total_debt_to_assets",
+    "inputs": ["total_debt", "total_assets"],
+    "formula": "total_debt / total_assets",
+    "threshold": null,
+    "bad_direction": "higher_is_worse",
+    "direction_basis": "inferred",
+    "diagnoses": "how much of the company's assets is financed by debt",
+    "quote": "leverage, expressed as total debt over assets"
+  },
+  {
+    "id": "M4",
+    "name": "Credit line availability (undrawn lines of credit over assets)",
+    "paper": {
+      "file": "fed_icr_vulnerabilities_2020.pdf",
+      "title": "Interest Coverage Ratios: Assessing Vulnerabilities in Nonfinancial Corporate Credit"
+    },
+    "level": "firm",
+    "ratio": "undrawn_credit_lines_to_assets",
+    "inputs": ["undrawn_credit_lines", "total_assets"],
+    "formula": "undrawn_credit_lines / total_assets",
+    "threshold": null,
+    "bad_direction": "lower_is_worse",
+    "direction_basis": "inferred",
+    "diagnoses": "how much unused borrowing capacity the company has as a buffer",
+    "quote": "credit line availability, expressed as total undrawn lines of credit over assets"
+  },
+  {
+    "id": "M5",
+    "name": "Share of debt maturing within a year",
+    "paper": {
+      "file": "fed_icr_vulnerabilities_2020.pdf",
+      "title": "Interest Coverage Ratios: Assessing Vulnerabilities in Nonfinancial Corporate Credit"
+    },
+    "level": "firm",
+    "ratio": "debt_maturing_within_one_year_share",
+    "inputs": ["debt_maturing_within_one_year", "total_debt"],
+    "formula": "debt_maturing_within_one_year / total_debt",
+    "threshold": null,
+    "bad_direction": "higher_is_worse",
+    "direction_basis": "inferred",
+    "diagnoses": "how much of the debt has to be repaid or refinanced within a year",
+    "quote": "only around 4 percent of debt matures within a year"
+  },
+  {
+    "id": "M6",
+    "name": "Debt composition (bonds relative to total debt)",
+    "paper": {
+      "file": "fed_icr_vulnerabilities_2020.pdf",
+      "title": "Interest Coverage Ratios: Assessing Vulnerabilities in Nonfinancial Corporate Credit"
+    },
+    "level": "firm",
+    "ratio": "bonds_to_total_debt",
+    "inputs": ["total_bonds", "total_debt"],
+    "formula": "total_bonds / total_debt",
+    "threshold": null,
+    "bad_direction": null,
+    "direction_basis": "not_stated",
+    "diagnoses": "the mix of bonds and loans in the company's debt",
+    "quote": "the median share of bonds relative to total debt"
+  }
+]
