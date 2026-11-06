@@ -181,3 +181,7 @@ data/                    fictional sample papers and financials
 scripts/                 regenerates the sample PDFs
 tests/                   pytest, no API key needed
 ```
+
+## License
+
+MIT License. See [LICENSE](LICENSE). The sample data and sample papers are fictional / synthetic.
