@@ -7,3 +7,6 @@ outputs/
 # keep private material out of a public repository
 data/private/
 .vscode/
+
+# secrets (not used now; keep out if an API key is ever added)
+.env
