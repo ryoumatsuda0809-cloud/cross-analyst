@@ -35,13 +35,28 @@ def allowed_values(*texts: str) -> list[float]:
     return vals
 
 
+def card_text(methods_md: str) -> str:
+    """02_methods.md without the parts that are not about the method itself: the verification table,
+    the 'found at lines 370-371' notes and the quoted paper lines. A line number or a figure from the
+    paper's prose must not make an unrelated number in the report look traceable."""
+    kept, fenced = [], False
+    for line in methods_md.splitlines():
+        s = line.strip()
+        if s.startswith("```"):
+            fenced = not fenced
+        elif not fenced and not s.startswith(("|", "- **Verification:**", ">")):
+            kept.append(line)
+    return "\n".join(kept)
+
+
 def matches(tok: str, allowed: list[float]) -> bool:
+    """True if the token is an allowed value, rounded to the token's own number of decimals.
+    A token written with % is compared with the value times 100."""
     v, d, pct = _value(tok)
     for a in allowed:
-        candidates = [a * 100] if pct else [a, a * 100, a * 365]
-        for c in candidates:
-            if round(c, d) == v or abs(c - v) <= 0.5 * 10 ** -d:
-                return True
+        c = a * 100 if pct else a
+        if round(c, d) == v or abs(c - v) <= 0.5 * 10 ** -d:
+            return True
     return False
 
 
@@ -61,7 +76,7 @@ def check_file(target: Path, run: Path) -> list[str]:
     text = target.read_text(encoding="utf-8")
     metrics = (run / "03a_metrics.md").read_text(encoding="utf-8")
     methods = (run / "02_methods.md").read_text(encoding="utf-8")
-    allowed = allowed_values(metrics, methods)
+    allowed = allowed_values(metrics, card_text(methods))
 
     clean = METHOD_ID.sub("", text)                      # "M2" is an ID, not a number
     clean = re.sub(r"\bFY\d{2,4}\b", "", clean)

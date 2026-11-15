@@ -54,7 +54,8 @@ def step_metrics(a) -> None:
     ratios = financials.compute(periods, data)
     md = financials.to_markdown(company_name(a.financials), periods, data, ratios)
     (a.run / "03a_metrics.md").write_text(md, encoding="utf-8")
-    missing = sorted({v for vals in ratios.values() for v in vals.values() if isinstance(v, str) and "missing" in v})
+    missing = sorted({f"{name}: {v}" for name, vals in ratios.items() for v in vals.values()
+                      if isinstance(v, str) and v.startswith("n/a (") and "first period" not in v})
     print(f"  {a.financials.name}: {len(periods)} period(s), {len(ratios)} ratios -> 03a_metrics.md")
     for m in missing:
         print(f"    [WARN] {m}")

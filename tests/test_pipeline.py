@@ -249,3 +249,111 @@ def test_single_period_gives_low_confidence_and_a_threshold_breach_is_reported(t
     text = _variant(tmp_path / "b", lambda t: t.replace("ebit,290,310,300", "ebit,100,150,60")
                     .replace("interest_expense,40,55,80", "interest_expense,200,100,120"))
     assert "breached in FY2023, FY2025" in text and "Verdict:** mixed" in text
+
+
+# --- arithmetic and input guards ----------------------------------------------------------------
+def test_ratio_over_a_negative_or_zero_denominator_is_not_reported_as_a_number():
+    items = {"net_income": -50, "equity": -200, "operating_cash_flow": 30, "ebit": 100, "interest_expense": 0}
+    r = financials.compute(["FY2025"], {"FY2025": items})
+    assert r["roe"]["FY2025"] == "n/a (negative equity)"                    # -50 / -200 must not read as +25%
+    assert r["ocf_to_net_income"]["FY2025"] == "n/a (negative net_income)"
+    assert r["ebit_interest_coverage"]["FY2025"] == "n/a (division by zero)"
+    r = financials.compute(["FY2025"], {"FY2025": {"ebit": -100, "interest_expense": 40}})
+    assert r["ebit_interest_coverage"]["FY2025"] == -2.5                    # a negative numerator is still meaningful
+
+
+def _load_text(tmp_path, text):
+    path = tmp_path / "f.csv"
+    path.write_text(text, encoding="utf-8")
+    return financials.load(path)
+
+
+def test_financial_data_with_reversed_periods_or_bad_cells_is_refused(tmp_path):
+    with pytest.raises(SystemExit, match="oldest to newest"):
+        _load_text(tmp_path, "item,FY2025,FY2024,FY2023\nrevenue,3,2,1\n")
+    with pytest.raises(SystemExit, match="not a number"):
+        _load_text(tmp_path, "item,FY2024,FY2025\nrevenue,100,(60)\n")
+    with pytest.raises(SystemExit, match="not a number"):
+        _load_text(tmp_path, "item,FY2024,FY2025\nrevenue,100,nan\n")
+    with pytest.raises(SystemExit, match="more than once"):
+        _load_text(tmp_path, "item,FY2024,FY2025\nrevenue,1,2\nrevenue,3,4\n")
+    with pytest.raises(SystemExit, match="not found"):
+        financials.load(tmp_path / "nothing.csv")
+    periods, data = _load_text(tmp_path, "item,Q4 2024,Q1 2025\nrevenue,\"1,200\",-5\n")
+    assert periods == ["Q4 2024", "Q1 2025"] and data["Q4 2024"]["revenue"] == 1200
+
+
+def test_quotation_must_match_whole_words_and_whole_numbers(tmp_path):
+    ext = tmp_path / "01_extracted"
+    ext.mkdir()
+    (ext / "p.methods.txt").write_text("firms with ICRs below 2.5 are flagged, and so are firms below 20.\n"
+                                       "Later: firms with ICRs below 2, or below 2.\n", encoding="utf-8")
+    card = {"id": "M1", "paper": {"file": "p.pdf", "title": "x"}, "quote": "ICRs below 2"}
+    v = cardlib.verify(card, ext)
+    assert v.found and v.first_line == 2                                    # not the "below 2.5" on line 1
+    (ext / "p.methods.txt").write_text("firms with ICRs below 2.5 or below 20\n", encoding="utf-8")
+    assert not cardlib.verify(card, ext).found
+
+
+def test_card_whose_inputs_differ_from_the_code_stops_the_run(full_run, tmp_path):
+    for c in cardlib.load(CARDS_DIR):
+        if c["ratio"] in financials.RATIOS:
+            assert sorted(c["inputs"]) == financials.inputs_of(c["ratio"]), c["id"]
+    cards = tmp_path / "cards"
+    shutil.copytree(CARDS_DIR, cards)
+    target = cards / "fed_icr_vulnerabilities_2020.json"
+    data = json.loads(target.read_text())
+    data[0]["inputs"] = ["operating_income", "interest_expense"]           # M1 says EBIT in the paper and the code
+    target.write_text(json.dumps(data))
+    work = tmp_path / "run"
+    shutil.copytree(full_run, work)
+    r = run("methods", "--cards", str(cards), run_dir=work)
+    assert r.returncode != 0 and "does not match the code" in (r.stdout + r.stderr)
+
+
+def test_check_does_not_accept_line_numbers_or_rescaled_values():
+    methods = ("| M7 | p.pdf | 01_extracted/p.methods.txt | 204-204 | FOUND |\n"
+               "- **Threshold:** `x` < 30\n- **Quotation:**\n  > about 69 percent of debt\n"
+               "- **Verification:** FOUND in `p`, lines 204-204\n  ```text\n  only 47 firms\n  ```\n")
+    allowed = check.allowed_values("| dso_days | 0.2500 |", check.card_text(methods))
+    assert check.matches("30", allowed) and check.matches("25%", allowed) and check.matches("0.25", allowed)
+    for invented in ("204", "69", "47", "91", "91.25", "25"):              # 91.25 = 0.25 * 365, 25 = 0.25 * 100
+        assert not check.matches(invented, allowed), invented
+
+
+def test_report_summary_orders_method_ids_as_numbers(tmp_path):
+    names = [f"M{i}" for i in (10, 2, 1)]
+    diag = ["# Diagnosis: X", "", "## Applicability", "", "| method | paper | applicable? | reason |", "|---|---|---|---|"]
+    diag += [f"| {n}: n | p.pdf | yes | ok |" for n in names] + ["", "## Findings", ""]
+    for n in names:
+        diag += [f"### {n}: n", "- **Threshold status:** none stated", "- **Verdict:** worsening", ""]
+    diag += ["## Where methods disagree", "", "x", "", "## What the data cannot tell us", "", "- q"]
+    (tmp_path / "03_diagnosis.md").write_text("\n".join(diag) + "\n", encoding="utf-8")
+    stages.run_report(tmp_path)
+    summary = (tmp_path / "diagnostic_report.md").read_text().split("## Findings")[0]
+    assert summary.index("**M1**") < summary.index("**M2**") < summary.index("**M10**")
+
+
+def test_common_line_item_names_are_mapped_to_the_pipeline_names(tmp_path):
+    text = ("item,FY2024,FY2025\nNet Sales,100,120\nCost of Goods Sold,60,70\nOperating Profit,20,25\n"
+            "Interest Expense,5,5\n売上高メモ,1,2\n")
+    periods, data = _load_text(tmp_path, text)
+    assert data["FY2025"]["revenue"] == 120 and data["FY2025"]["cost_of_sales"] == 70
+    assert data["FY2025"]["operating_income"] == 25 and data["FY2025"]["interest_expense"] == 5
+    assert data["FY2025"]["売上高メモ"] == 2                       # unknown names are kept, not guessed
+    ratios = financials.compute(periods, data)
+    assert ratios["operating_margin"]["FY2025"] == pytest.approx(25 / 120)
+
+
+def test_two_rows_with_the_same_meaning_are_refused(tmp_path):
+    with pytest.raises(SystemExit, match="more than once"):
+        _load_text(tmp_path, "item,FY2024,FY2025\nrevenue,100,120\nNet Sales,100,120\n")
+
+
+def test_committed_example_outputs_match_a_fresh_run(full_run):
+    """examples/harbor_lane/ is what a reader sees on GitHub; it must be what the code produces today.
+    If this fails after a deliberate change, regenerate the folder (see README, 'Example output')."""
+    example = ROOT / "examples" / "harbor_lane"
+    names = ["diagnostic_report.md", "03_diagnosis.md", "03a_metrics.md", "02_methods.md", "check_result.txt"]
+    for name in names:
+        assert (example / name).read_text(encoding="utf-8") == (full_run / name).read_text(encoding="utf-8"), name

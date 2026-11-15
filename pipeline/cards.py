@@ -44,6 +44,8 @@ def load(folder: Path) -> list[dict]:
 
 
 def _validate(card: dict, source: str) -> None:
+    if not isinstance(card, dict):
+        raise SystemExit(f"{source}: every card must be a JSON object")
     where = f"{source}: card {card.get('id', '?')}"
     missing = [k for k in REQUIRED if k not in card]
     if missing:
@@ -64,8 +66,10 @@ def _validate(card: dict, source: str) -> None:
     if th is not None and (not isinstance(th, dict) or th.get("operator") not in OPERATORS
                            or not isinstance(th.get("value"), (int, float))):
         raise SystemExit(f"{where}: threshold must be null or {{\"operator\": one of {OPERATORS}, \"value\": number}}")
-    if not card["quote"].strip():
+    if not isinstance(card["quote"], str) or not card["quote"].strip():
         raise SystemExit(f"{where}: quote is empty")
+    if not isinstance(card["ratio"], str) or not all(isinstance(i, str) for i in card["inputs"]):
+        raise SystemExit(f"{where}: ratio and inputs must be names (text)")
 
 
 @dataclass
@@ -80,7 +84,13 @@ class Verification:
 
 
 def _pattern(quote: str) -> re.Pattern:
-    return re.compile(r"\s+".join(re.escape(word) for word in quote.split()))
+    """The quotation as a regex. It must start and end on a word boundary, so that
+    "below 2" is not 'found' inside "below 20" or "below 2.5"."""
+    words = quote.split()
+    body = r"\s+".join(re.escape(word) for word in words)
+    start = r"(?<!\w)" if words[0][0].isalnum() else ""
+    end = r"(?![\w]|[.,]\d)" if words[-1][-1].isalnum() else ""
+    return re.compile(start + body + end)
 
 
 def verify(card: dict, extracted: Path) -> Verification:

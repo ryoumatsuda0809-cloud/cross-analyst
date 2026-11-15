@@ -13,61 +13,180 @@ Input CSV format (one row per line item, one column per period):
 from __future__ import annotations
 
 import csv
+import math
+import re
 from pathlib import Path
+
+class Undefined(Exception):
+    """The ratio has no meaning for this period (the reason is the message)."""
+
+
+def _div(num: float, d, den_item: str) -> float:
+    """num / d[den_item], but only when the denominator is positive.
+
+    A ratio over a zero denominator does not exist, and over a negative one its sign is misleading
+    (negative net income over negative equity would show as a healthy positive return on equity).
+    """
+    den = d[den_item]
+    if den == 0:
+        raise ZeroDivisionError
+    if den < 0:
+        raise Undefined(f"negative {den_item}")
+    return num / den
+
+
+def _fcf(d) -> float:
+    return d["operating_income"] + d["depreciation"] - d["interest_expense"] - d["taxes"] - d["capital_expenditures"]
+
 
 # name -> (formula shown to the reader, function of a period's items)
 RATIOS = {
     "current_ratio":        ("current_assets / current_liabilities",
-                             lambda d: d["current_assets"] / d["current_liabilities"]),
+                             lambda d: _div(d["current_assets"], d, "current_liabilities")),
     "quick_ratio":          ("(cash + receivables) / current_liabilities",
-                             lambda d: (d["cash"] + d["receivables"]) / d["current_liabilities"]),
+                             lambda d: _div(d["cash"] + d["receivables"], d, "current_liabilities")),
     "debt_to_equity":       ("total_liabilities / equity",
-                             lambda d: d["total_liabilities"] / d["equity"]),
+                             lambda d: _div(d["total_liabilities"], d, "equity")),
     "gross_margin":         ("gross_profit / revenue",
-                             lambda d: d["gross_profit"] / d["revenue"]),
+                             lambda d: _div(d["gross_profit"], d, "revenue")),
     "operating_margin":     ("operating_income / revenue",
-                             lambda d: d["operating_income"] / d["revenue"]),
+                             lambda d: _div(d["operating_income"], d, "revenue")),
     "net_margin":           ("net_income / revenue",
-                             lambda d: d["net_income"] / d["revenue"]),
+                             lambda d: _div(d["net_income"], d, "revenue")),
     "roa":                  ("net_income / total_assets",
-                             lambda d: d["net_income"] / d["total_assets"]),
+                             lambda d: _div(d["net_income"], d, "total_assets")),
     "roe":                  ("net_income / equity",
-                             lambda d: d["net_income"] / d["equity"]),
+                             lambda d: _div(d["net_income"], d, "equity")),
     "interest_coverage":    ("operating_income / interest_expense",
-                             lambda d: d["operating_income"] / d["interest_expense"]),
+                             lambda d: _div(d["operating_income"], d, "interest_expense")),
     "asset_turnover":       ("revenue / total_assets",
-                             lambda d: d["revenue"] / d["total_assets"]),
+                             lambda d: _div(d["revenue"], d, "total_assets")),
     "dso_days":             ("receivables / revenue * 365",
-                             lambda d: d["receivables"] / d["revenue"] * 365),
+                             lambda d: _div(d["receivables"], d, "revenue") * 365),
     "dio_days":             ("inventory / cost_of_sales * 365",
-                             lambda d: d["inventory"] / d["cost_of_sales"] * 365),
+                             lambda d: _div(d["inventory"], d, "cost_of_sales") * 365),
     "dpo_days":             ("payables / cost_of_sales * 365",
-                             lambda d: d["payables"] / d["cost_of_sales"] * 365),
+                             lambda d: _div(d["payables"], d, "cost_of_sales") * 365),
     "cash_conversion_cycle": ("dso_days + dio_days - dpo_days",
-                             lambda d: (d["receivables"] / d["revenue"] + d["inventory"] / d["cost_of_sales"]
-                                        - d["payables"] / d["cost_of_sales"]) * 365),
+                             lambda d: (_div(d["receivables"], d, "revenue") + _div(d["inventory"], d, "cost_of_sales")
+                                        - _div(d["payables"], d, "cost_of_sales")) * 365),
     "accrual_ratio":        ("(net_income - operating_cash_flow) / total_assets",
-                             lambda d: (d["net_income"] - d["operating_cash_flow"]) / d["total_assets"]),
+                             lambda d: _div(d["net_income"] - d["operating_cash_flow"], d, "total_assets")),
     "ocf_to_net_income":    ("operating_cash_flow / net_income",
-                             lambda d: d["operating_cash_flow"] / d["net_income"]),
+                             lambda d: _div(d["operating_cash_flow"], d, "net_income")),
+    # Ratios used by the interest coverage papers
+    "ebit_interest_coverage": ("ebit / interest_expense",
+                               lambda d: _div(d["ebit"], d, "interest_expense")),
+    "total_debt_to_assets":   ("total_debt / total_assets",
+                               lambda d: _div(d["total_debt"], d, "total_assets")),
+    "free_cash_flow":         ("operating_income + depreciation - interest_expense - taxes - capital_expenditures",
+                               _fcf),
+    "free_cash_flow_to_assets": ("free_cash_flow / total_assets",
+                               lambda d: _div(_fcf(d), d, "total_assets")),
+    "undrawn_credit_lines_to_assets": ("undrawn_credit_lines / total_assets",
+                               lambda d: _div(d["undrawn_credit_lines"], d, "total_assets")),
 }
 
 
+class _Recorder(dict):
+    """Stands in for a period's items and remembers which ones a ratio asked for."""
+
+    def __missing__(self, key):
+        self[key] = 1.0
+        return 1.0
+
+
+def inputs_of(ratio: str) -> list[str]:
+    """The line items the ratio's function actually reads (so a method card's `inputs` can be checked)."""
+    rec = _Recorder()
+    RATIOS[ratio][1](rec)
+    return sorted(rec)
+
+
+# Other names a data file may use for the line items above. The key is the normalized spelling
+# (lower case, spaces and hyphens as "_"); an unknown name is kept as written and simply goes unused.
+ALIASES = {
+    "revenue": ("sales", "net_sales", "total_revenue", "total_sales", "売上高", "売上"),
+    "cost_of_sales": ("cost_of_goods_sold", "cogs", "cost_of_revenue", "売上原価"),
+    "gross_profit": ("gross_income", "売上総利益"),
+    "operating_income": ("operating_profit", "income_from_operations", "営業利益"),
+    "ebit": ("earnings_before_interest_and_taxes",),
+    "depreciation": ("depreciation_and_amortization", "d_and_a", "減価償却費"),
+    "interest_expense": ("interest_paid", "interest_expenses", "支払利息"),
+    "taxes": ("income_taxes", "income_tax_expense", "tax_expense", "法人税等"),
+    "net_income": ("net_profit", "net_earnings", "profit_for_the_year", "当期純利益"),
+    "operating_cash_flow": ("cash_from_operations", "cash_flow_from_operations", "ocf", "営業キャッシュフロー"),
+    "capital_expenditures": ("capex", "capital_expenditure", "設備投資"),
+    "cash": ("cash_and_equivalents", "cash_and_cash_equivalents", "現金及び預金"),
+    "receivables": ("accounts_receivable", "trade_receivables", "売掛金"),
+    "inventory": ("inventories", "棚卸資産"),
+    "current_assets": ("total_current_assets", "流動資産"),
+    "payables": ("accounts_payable", "trade_payables", "買掛金"),
+    "current_liabilities": ("total_current_liabilities", "流動負債"),
+    "total_debt": ("interest_bearing_debt", "borrowings", "有利子負債"),
+    "undrawn_credit_lines": ("undrawn_credit_facilities", "unused_credit_lines"),
+    "total_assets": ("assets_total", "総資産", "資産合計"),
+    "total_liabilities": ("liabilities_total", "負債合計"),
+    "equity": ("shareholders_equity", "stockholders_equity", "total_equity", "純資産", "自己資本"),
+}
+_CANONICAL = {alias: name for name, aliases in ALIASES.items() for alias in aliases}
+
+
+def canonical_item(name: str) -> str:
+    """The name this pipeline uses for a line item ('Net Sales' -> 'revenue'); unknown names are kept as written."""
+    key = re.sub(r"[\s\-]+", "_", name.strip().lower().replace("&", "and"))
+    if key in ALIASES:
+        return key
+    return _CANONICAL.get(key, name.strip())
+
+
 def load(path: Path) -> tuple[list[str], dict[str, dict[str, float]]]:
-    """Returns (periods, {period: {item: value}})."""
+    """Returns (periods, {period: {item: value}}). Line item names are mapped with canonical_item()."""
+    if not path.is_file():
+        raise SystemExit(f"{path}: financial data file not found. Pass one with --financials path/to/company.csv")
     with path.open(newline="", encoding="utf-8") as f:
         rows = [r for r in csv.reader(f) if r and not r[0].lstrip().startswith("#")]   # skip comment lines
     if len(rows) < 2 or len(rows[0]) < 2:
         raise SystemExit(f"{path}: expected a header like 'item,FY2023,FY2024' and at least one data row")
     header, body = rows[0], [r for r in rows[1:] if r and r[0].strip() and not r[0].startswith("#")]
     periods = [h.strip() for h in header[1:]]
+    if "" in periods or len(set(periods)) != len(periods):
+        raise SystemExit(f"{path}: every period column needs its own name (got {', '.join(periods)})")
+    _check_period_order(path, periods)
     data: dict[str, dict[str, float]] = {p: {} for p in periods}
+    seen = set()
     for r in body:
-        item = r[0].strip()
+        item = canonical_item(r[0])
+        if item in seen:
+            raise SystemExit(f"{path}: line item '{item}' appears more than once "
+                             f"(including under another name, e.g. '{r[0].strip()}')")
+        seen.add(item)
         for p, v in zip(periods, r[1:]):
             if v.strip():
-                data[p][item] = float(v.replace(",", ""))
+                data[p][item] = _number(v, path, item, p)
     return periods, data
+
+
+def _number(cell: str, path: Path, item: str, period: str) -> float:
+    try:
+        value = float(cell.replace(",", ""))
+    except ValueError:
+        value = math.nan
+    if not math.isfinite(value):
+        raise SystemExit(f"{path}: {item} in {period} is not a number: '{cell.strip()}' "
+                         "(write negatives as -60, not (60); leave the cell empty when there is no value)")
+    return value
+
+
+def _check_period_order(path: Path, periods: list[str]) -> None:
+    """Trends compare each period with the one to its left, so the columns must run oldest to newest."""
+    years = [re.search(r"(?<!\d)(?:19|20)\d{2}(?!\d)", p) for p in periods]
+    if not all(years):
+        return                              # labels without a four-digit year cannot be checked
+    years = [int(m.group()) for m in years]
+    if any(b < a for a, b in zip(years, years[1:])):
+        raise SystemExit(f"{path}: period columns must run from oldest to newest, left to right "
+                         f"(got {', '.join(periods)}). Reorder the columns; otherwise every trend would be reversed.")
 
 
 def compute(periods, data):
@@ -82,12 +201,14 @@ def compute(periods, data):
                 out[name][p] = f"n/a (missing {e.args[0]})"
             except ZeroDivisionError:
                 out[name][p] = "n/a (division by zero)"
+            except Undefined as e:
+                out[name][p] = f"n/a ({e})"
     # period-over-period revenue growth
     out["revenue_growth"] = {periods[0]: "n/a (first period)"}
     for prev, cur in zip(periods, periods[1:]):
         try:
-            out["revenue_growth"][cur] = data[cur]["revenue"] / data[prev]["revenue"] - 1
-        except (KeyError, ZeroDivisionError):
+            out["revenue_growth"][cur] = _div(data[cur]["revenue"], data[prev], "revenue") - 1
+        except (KeyError, ZeroDivisionError, Undefined):
             out["revenue_growth"][cur] = "n/a"
     # change vs previous period for the "days" metrics (methods often test whether a cycle lengthened)
     for name in ("dso_days", "dio_days", "dpo_days", "cash_conversion_cycle"):
@@ -169,20 +290,3 @@ def all_numbers(periods, data, ratios) -> list[float]:
     nums = [v for p in periods for v in data[p].values()]
     nums += [v for vals in ratios.values() for v in vals.values() if not isinstance(v, str)]
     return nums
-
-
-# Ratios used by the interest coverage papers
-RATIOS.update({
-    "ebit_interest_coverage": ("ebit / interest_expense",
-                               lambda d: d["ebit"] / d["interest_expense"]),
-    "total_debt_to_assets":   ("total_debt / total_assets",
-                               lambda d: d["total_debt"] / d["total_assets"]),
-    "free_cash_flow":         ("operating_income + depreciation - interest_expense - taxes - capital_expenditures",
-                               lambda d: d["operating_income"] + d["depreciation"] - d["interest_expense"]
-                               - d["taxes"] - d["capital_expenditures"]),
-    "free_cash_flow_to_assets": ("free_cash_flow / total_assets",
-                               lambda d: (d["operating_income"] + d["depreciation"] - d["interest_expense"]
-                                          - d["taxes"] - d["capital_expenditures"]) / d["total_assets"]),
-    "undrawn_credit_lines_to_assets": ("undrawn_credit_lines / total_assets",
-                               lambda d: d["undrawn_credit_lines"] / d["total_assets"]),
-})

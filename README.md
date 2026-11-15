@@ -98,9 +98,49 @@ The CSV has one row per line item and one column per period. Lines starting with
 `# company: <name>` sets the company name. See `data/financials/harbor_lane_supply.csv`.
 Missing items are reported as `n/a`.
 
-Only use PDFs you have the right to use.
+- Period columns must run **oldest to newest**, left to right; a file whose years run backwards is refused,
+  because every trend would be reversed.
+- A ratio whose denominator is zero or negative is reported as `n/a` with the reason (for example
+  `n/a (negative equity)`), not as a number: negative net income over negative equity is not a healthy ROE.
+- A cell that is not a number stops the run. Write negatives as `-60`, not `(60)`.
+
+Line item names are matched loosely: `Net Sales`, `COGS`, `Operating Profit`, `売上高` and similar spellings are
+read as `revenue`, `cost_of_sales`, `operating_income` (full list: `ALIASES` in `pipeline/financials.py`).
+A name that is not in the list is kept as written and not used by any ratio. Two rows that mean the same item
+(`revenue` and `Net Sales`) stop the run instead of one silently winning.
+
+Only use PDFs you have the right to use. The two sample papers are Federal Reserve notes (FEDS Notes)
+saved from the Fed's website; check the Fed's terms before redistributing them.
+
+### Example output
+
+`examples/harbor_lane/` holds the files a run produces for the fictional sample company:
+`diagnostic_report.md` (start here), `03_diagnosis.md`, `03a_metrics.md`, `02_methods.md` and `check_result.txt`.
+A test fails if these differ from a fresh run. To refresh them after a deliberate change:
+
+```bash
+python diagnose.py run --run outputs/final
+cp outputs/final/{diagnostic_report.md,03_diagnosis.md,03a_metrics.md,02_methods.md,check_result.txt} examples/harbor_lane/
+```
+
+The extracted paper text (`01_extracted/`) is not included, because it is the papers' own text.
 
 ---
+
+## Scope and known limits
+
+- Only PDFs with a text layer are read. Scanned images, complex tables and equations are not interpreted.
+- The method cards (`data/method_cards/`) are written by hand. The pipeline checks that each card's quotation is in
+  the paper and that its inputs match the code; it does not judge whether the card reads the paper correctly.
+- Thresholds are compared on the values as displayed (four decimals).
+- The sample company is fictional; the output is a screening aid, not financial advice.
+
+## How this was built
+
+The idea, the design (turning economics papers into fixed, rule-based diagnostics) and the choice of papers and
+methods are the author's. Claude (Anthropic's AI assistant) helped write and review the code, which is why it
+appears as a co-author in the git history. Every claim is meant to be checkable rather than trusted: quotations are verified against the paper text,
+all arithmetic is in one file, and `check` traces every number in the report. 31 tests run offline (`python -m pytest -q`).
 
 ## Method cards
 
@@ -122,8 +162,12 @@ One JSON file per paper in `data/method_cards/`, each holding a list of cards:
 | `notes` | optional |
 
 The `methods` step looks for each `quote` in `01_extracted/<paper>.methods.txt`. Line breaks and repeated
-spaces are ignored; nothing else is. A card whose quotation is not found stops the run and is marked
+spaces are ignored; nothing else is, and the quotation must start and end on a whole word or number
+("below 2" is not found in "below 2.5"). A card whose quotation is not found stops the run and is marked
 `NOT FOUND` in `02_methods.md`.
+
+A card's `inputs` must also be exactly the line items that `pipeline/financials.py` reads for that ratio.
+If they differ the run stops, so a card cannot describe one formula while the code computes another.
 
 ## Rules used by `apply`
 
@@ -176,6 +220,7 @@ pipeline/check.py        traceability check for numbers and method IDs
 data/papers/             the research PDFs
 data/method_cards/       one JSON file of method cards per paper
 data/financials/         fictional company data
+examples/harbor_lane/    example output of one run
 scripts/                 regenerates synthetic sample PDFs
 tests/                   pytest, fully offline
 ```

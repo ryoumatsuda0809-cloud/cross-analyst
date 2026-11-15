@@ -29,8 +29,27 @@ TREND_TEXT = {"rising": "rose in every period", "falling": "fell in every period
 # ---------------------------------------------------------------------------
 # methods: method cards -> 02_methods.md
 # ---------------------------------------------------------------------------
-def run_methods(run: Path, cards_dir: Path) -> Path:
+def load_cards(cards_dir: Path) -> list[dict]:
+    """Load the cards and make sure each one describes what financials.py really computes.
+
+    A card names a ratio and lists its inputs; the arithmetic lives in financials.py. If the two
+    disagree, the report would show the card's formula next to a number computed some other way.
+    """
     cards = cardlib.load(cards_dir)
+    problems = []
+    for c in cards:
+        if c["ratio"] in financials.RATIOS:
+            actual = financials.inputs_of(c["ratio"])
+            if sorted(c["inputs"]) != actual:
+                problems.append(f"{c['id']}: the card lists inputs [{', '.join(sorted(c['inputs']))}] but "
+                                f"`{c['ratio']}` in pipeline/financials.py is computed from [{', '.join(actual)}]")
+    if problems:
+        raise SystemExit("Method card does not match the code:\n  " + "\n  ".join(problems))
+    return cards
+
+
+def run_methods(run: Path, cards_dir: Path) -> Path:
+    cards = load_cards(cards_dir)
     extracted = run / EXTRACTED
     if not extracted.is_dir():
         raise SystemExit(f"{extracted} does not exist. Run the extract step first.")
@@ -291,7 +310,7 @@ def _questions(periods, raw, ratios, assessments) -> list[str]:
 
 
 def run_apply(run: Path, cards_dir: Path) -> Path:
-    cards = cardlib.load(cards_dir)
+    cards = load_cards(cards_dir)
     metrics = run / "03a_metrics.md"
     if not metrics.exists():
         raise SystemExit(f"{metrics} does not exist. Run the metrics step first.")
@@ -380,7 +399,7 @@ def run_report(run: Path) -> Path:
 
     def priority(f):
         return (0 if _field(f, "Threshold status").startswith("breached") else 1,
-                0 if _field(f, "Verdict") == "worsening" else 1, f["id"])
+                0 if _field(f, "Verdict") == "worsening" else 1, int(f["id"][1:]))
 
     lines = [f"# Financial Diagnostic Report: {d['company']}", "", "## Summary", ""]
     if findings:
