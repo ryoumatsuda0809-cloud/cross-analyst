@@ -109,8 +109,16 @@ read as `revenue`, `cost_of_sales`, `operating_income` (full list: `ALIASES` in 
 A name that is not in the list is kept as written and not used by any ratio. Two rows that mean the same item
 (`revenue` and `Net Sales`) stop the run instead of one silently winning.
 
-Only use PDFs you have the right to use. The two sample papers are Federal Reserve notes (FEDS Notes)
-saved from the Fed's website; check the Fed's terms before redistributing them.
+Only use PDFs you have the right to use. The two sample papers are Federal Reserve Board notes (FEDS Notes),
+saved from the Fed's website and kept here only so that the quotations on the method cards can be checked
+against the real text. They are not modified and remain the Board's work:
+
+- *Interest Coverage Ratios: Assessing Vulnerabilities in Nonfinancial Corporate Credit*, FEDS Notes, December 3, 2020,
+  https://doi.org/10.17016/2380-7172.2779
+- *Stress Testing the Corporate Debt Servicing Capacity: A Scenario Analysis*, FEDS Notes, May 9, 2024,
+  https://doi.org/10.17016/2380-7172.3481
+
+This repository is a non-commercial portfolio project. If the Board objects to the copies, they will be removed.
 
 ### Example output
 
