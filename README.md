@@ -150,6 +150,21 @@ methods are the author's. Claude (Anthropic's AI assistant) helped write and rev
 appears as a co-author in the git history. Every claim is meant to be checkable rather than trusted: quotations are verified against the paper text,
 all arithmetic is in one file, and `check` traces every number in the report. 31 tests run offline (`python -m pytest -q`).
 
+## Research ledger and what "verified" means here
+
+`methods/cross-analysis/` holds the project's research ledger: notes on which claims about human and AI work
+are backed by real papers, with every row marked as found, AI-verified, or human-verified
+(start with `methods/cross-analysis/research/README.md`, then `SOURCES.md`). The same rule applies to this pipeline:
+
+| Check | Who does it | What it proves |
+|---|---|---|
+| `methods` step: the card's quotation is in the paper text | the program | the quotation is real and the paper says it |
+| `check` step: every number traces to the data and the cards | the program | no invented numbers |
+| Opening the paper and confirming that the card reads it correctly | **a person** | the card is a fair reading of the paper |
+
+The program can do the first two. It can never do the third, so a method card counts as human-verified
+only after someone has done it. The eight cards here are verified by the program only.
+
 ## Method cards
 
 One JSON file per paper in `data/method_cards/`, each holding a list of cards:
@@ -229,6 +244,7 @@ data/papers/             the research PDFs
 data/method_cards/       one JSON file of method cards per paper
 data/financials/         fictional company data
 examples/harbor_lane/    example output of one run
+methods/cross-analysis/  research ledger: papers checked by a person, source registry, audit
 scripts/                 regenerates synthetic sample PDFs
 tests/                   pytest, fully offline
 ```
