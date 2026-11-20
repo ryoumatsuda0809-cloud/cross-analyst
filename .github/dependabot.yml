@@ -4,6 +4,12 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # These majors need Python 3.10+; the project supports 3.9 (README). Revisit if 3.9 is dropped.
+      - dependency-name: pytest
+        update-types: ["version-update:semver-major"]
+      - dependency-name: pypdf
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
